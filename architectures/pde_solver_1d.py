@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.autograd import grad, Variable
+from torch.autograd import grad
 
 import numpy as np
 
@@ -84,9 +84,3 @@ class BurgerNet(nn.Module):
 
         return total_params
 
-
-
-
-class LinearStringNet(nn.Module):
-    def __init__(self):
-        pass

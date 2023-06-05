@@ -8,7 +8,7 @@ from architectures.pde_solver_1d import BurgerNet
 
 
 if __name__ == "__main__":
-    net_path = './burgernet_train_epoch10000'
+    net_path = './models/burgernet_train_epoch10000'
     
     input_node = torch.tensor([2])
     hidden_node = torch.ones(8, dtype=int) * 20

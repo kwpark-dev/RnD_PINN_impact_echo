@@ -60,7 +60,6 @@ class BurgerDataset(Dataset):
         self.ub = self.X_star.max(axis=0) # upper bounds of x & t
 
 
-
     def __len__(self):
         
         return self.X_star.shape[0]
@@ -71,14 +70,86 @@ class BurgerDataset(Dataset):
         return self.X_star[idx], self.u_star[idx]
 
 
-def perturbation(path, v_init, scale):
+
+class GridDataset(Dataset):
+    def __init__(self, time, mesh):
+        t, x, y = eom_2d_collocation(time, mesh)
+        self.grid = torch.concat([t,x,y], axis=1)
+        
+
+    def __len__(self):
+        
+        return self.grid.shape[0]
+
+
+    def __getitem__(self, idx):
+        
+        return self.grid[idx]
+
+
+def perturbation(path, v_init, x_pos, y_pos, scale):
     data = np.load(path)
 
-    t = data[:, 0]
+    t = torch.from_numpy(data[:, 0]).float()
+    t = t[:, None]
     u = data[:, 1]*scale
+    x = torch.ones_like(t)*x_pos
+    y = torch.ones_like(t)*y_pos
     N = len(t)
-    print(N)
-
+    
     up = np.array([np.trapz(u[:i]) for i in range(N)]) + v_init
+    up = up[:, None]
 
-    return t, u, up    
+    return t, x.float(), y.float(), torch.from_numpy(up).float() 
+
+
+def eom_2d_random_ic(xb, yb, val, size):
+    t = torch.zeros((size,1))
+    x = (xb[1]-xb[0])*torch.rand(size,1)+xb[0]
+    y = (yb[1]-yb[0])*torch.rand(size,1)+yb[0]
+    U = torch.zeros((size,2))+torch.from_numpy(val).float()
+    
+    return t, x, y, U
+
+
+def eom_2d_random_bc(tb, xb, yb, val, size):
+    size_ = int(size/4)
+    size__ = int(size/2)
+
+    t = (tb[1]-tb[0])*torch.rand(size,1)+tb[0]
+    U = torch.zeros((size,2))+torch.from_numpy(val).float()
+
+    binary = torch.from_numpy(np.random.choice(xb, (size,1))).float()
+    randy = (yb[1]-yb[0])*torch.rand(size,1)+yb[0]
+    x = torch.cat((binary[:size__], randy[:size__]))
+    y = torch.cat((binary[size__:], randy[size__:]))
+
+    return t, x, y, U
+
+
+def eom_2d_collocation(time, mesh):
+    tmp = torch.ones(len(mesh),1)
+    t = (time*tmp).T
+    t = t.flatten()[:, None]
+
+    x, y = mesh.T
+    tmp2 = torch.ones(len(time),1)
+    x = (x*tmp2).flatten()[:, None]
+    y = (y*tmp2).flatten()[:, None]
+
+    return t, x, y
+
+
+def material_info(rho, nu):
+    info = {}
+    info['density'] = torch.tensor(rho).float()
+
+    A = np.array([[1-nu, nu, nu],
+                  [nu, 1-nu, nu],
+                  [nu, nu, 1-nu]])
+    B = np.diag([(1-2*nu)/2, (1-2*nu)/2, (1-2*nu)/2])
+    Z = np.zeros_like(A)
+
+    info['elasticity'] = torch.from_numpy(np.bmat([[A, Z], [Z, B]])).float()
+
+    return info
