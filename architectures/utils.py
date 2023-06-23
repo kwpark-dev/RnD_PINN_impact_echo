@@ -140,6 +140,48 @@ def eom_2d_collocation(time, mesh):
     return t, x, y
 
 
+def eom_2d_ic_grid(xb, yb, size):
+    x = torch.linspace(xb[0], xb[1], size)
+    y = torch.linspace(yb[0], yb[1], size)
+    
+    x, y = torch.meshgrid(x,y, indexing='xy')
+    x = x.flatten()[:, None]
+    y = y.flatten()[:, None]
+    t = torch.zeros_like(x)
+
+    return t.float(), x.float(), y.float()
+
+
+def eom_2d_perturb(path, center, scale, N):
+    data = np.load(path)
+
+    # t = torch.from_numpy(data[:, 0]).float()
+    t = data[:, 0]
+    # t = t[:, None]
+    amp = data[:, 1]*scale
+
+    x = np.linspace(0, 0.05, N, endpoint=True)
+    y = np.linspace(0, 0.05, N, endpoint=True)
+
+    xx, tt  = np.meshgrid(x, t)
+    yy, _ = np.meshgrid(y, t)
+    
+    tt = tt.flatten()[:, None]
+    xx = xx.flatten()[:, None]
+    yy = yy.flatten()[:, None]
+    
+    u = amp*(xx-center[0])
+    v = amp*(yy-center[1])
+
+    tt = torch.from_numpy(tt).float()
+    xx = torch.from_numpy(xx).float()
+    yy = torch.from_numpy(yy).float()
+    u = torch.from_numpy(u).float()
+    u = torch.from_numpy(v).float()
+
+    return tt, xx, yy, u, v
+
+
 def material_info(rho, nu):
     info = {}
     info['density'] = torch.tensor(rho).float()

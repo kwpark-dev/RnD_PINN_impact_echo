@@ -13,11 +13,13 @@ from architectures.pde_solver_2d import EchoNet, solid_mechanics_network, time_d
 
 
 if '__main__' == __name__:
+
     ptr_path = './data/impact_echo/impact_profile/Han_pulse.npy'
     mesh_path = './data/impact_echo/plane_echo/triangle_mesh.npy'
     field_path = './data/impact_echo/plane_echo/uv*.npy'
 
     t_pscb, x_pscb, y_pscb, v_pscb = perturbation(ptr_path, 0, x_pos=0.025, y_pos=0.025, scale=1e-8)
+    print(len(t_pscb))
     # fig, ax = plt.subplots(1,2, figsize=(16, 6))
     # ax[0].plot(t, impact, 'b')
     # ax[0].set_xlabel('time')
