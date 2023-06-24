@@ -15,7 +15,7 @@ from architectures.pde_solver_2d import EchoNet, solid_mechanics_network, time_d
 if '__main__' == __name__:
 
     # Generate data
-    # 1. Training
+    # 1. Training for particular data
     run_time = 12e-5
     Npts = 6000
     Ncol = 120000
@@ -45,11 +45,13 @@ if '__main__' == __name__:
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
 
-    ptr_path = './data/impact_echo/impact_profile/Han_pulse.npy'
-    t_ptb, x_ptb, y_ptb, u_ptb, v_ptb = eom_2d_perturb(ptr_path, [0.025, 0.025], 1e-8, 100)
+    ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
+    t_ptb, x_ptb, y_ptb, u_ptb, v_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 100)
     
-    
-    # 2. Test data
+    # 2. Training for distance data
+
+
+    # 3. Test data
     mesh_path = './data/impact_echo/plane_echo/triangle_mesh.npy'
     mesh = np.load(mesh_path)
     mesh = torch.from_numpy(mesh).float()

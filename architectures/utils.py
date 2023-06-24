@@ -155,10 +155,15 @@ def eom_2d_ic_grid(xb, yb, size):
 def eom_2d_perturb(path, center, scale, N):
     data = np.load(path)
 
-    # t = torch.from_numpy(data[:, 0]).float()
     t = data[:, 0]
-    # t = t[:, None]
     amp = data[:, 1]*scale
+
+    mask = np.array(range(len(t)))
+    mask = np.where(mask%3==0, True, False)
+    mask[-1] = True # add the last point
+
+    t = t[mask] # to reduce data by 1/3
+    amp = amp[mask]
 
     x = np.linspace(0, 0.05, N, endpoint=True)
     y = np.linspace(0, 0.05, N, endpoint=True)
