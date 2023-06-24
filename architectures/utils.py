@@ -163,7 +163,7 @@ def eom_2d_perturb(path, center, scale, N):
     mask[-1] = True # add the last point
 
     t = t[mask] # to reduce data by 1/3
-    amp = amp[mask]
+    amp = amp[mask][:, None]
 
     x = np.linspace(0, 0.05, N, endpoint=True)
     y = np.linspace(0, 0.05, N, endpoint=True)
@@ -171,20 +171,39 @@ def eom_2d_perturb(path, center, scale, N):
     xx, tt  = np.meshgrid(x, t)
     yy, _ = np.meshgrid(y, t)
     
+    u = amp*(xx-center[0])
+    v = amp*(yy-center[1])
+
     tt = tt.flatten()[:, None]
     xx = xx.flatten()[:, None]
     yy = yy.flatten()[:, None]
-    
-    u = amp*(xx-center[0])
-    v = amp*(yy-center[1])
+    u = u.flatten()[:, None]
+    v = v.flatten()[:, None]
 
     tt = torch.from_numpy(tt).float()
     xx = torch.from_numpy(xx).float()
     yy = torch.from_numpy(yy).float()
     u = torch.from_numpy(u).float()
-    u = torch.from_numpy(v).float()
+    v = torch.from_numpy(v).float()
 
-    return tt, xx, yy, u, v
+    return tt, xx, yy, torch.concat([u, v], axis=1)
+
+
+def eom_2d_distance(grid, x_scale, y_scale):
+    dist = []
+
+    for i in grid:
+        min_dist = min(i[0], i[1], i[2], x_scale-i[1], y_scale-i[2])
+        dist.append(min_dist)
+
+    dist = torch.FloatTensor(dist)
+
+    return dist[:, None]
+    
+
+
+
+
 
 
 def material_info(rho, nu):

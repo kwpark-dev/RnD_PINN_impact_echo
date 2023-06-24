@@ -8,7 +8,7 @@ from pyDOE import lhs
 from tqdm import tqdm
 from glob import glob
 
-from architectures.utils import eom_2d_perturb
+from architectures.utils import eom_2d_perturb, eom_2d_distance
 from architectures.pde_solver_2d import EchoNet, solid_mechanics_network, time_derivative_network
 
 
@@ -44,9 +44,15 @@ if '__main__' == __name__:
 
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
+    distance = eom_2d_distance(grid_col, 0.05, 0.05)
+    
+    t_col, x_col, y_col = grid_col.T
+    t_col = t_col[:, None]
+    x_col = x_col[:, None]
+    y_col = y_col[:, None]
 
     ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
-    t_ptb, x_ptb, y_ptb, u_ptb, v_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 100)
+    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 100)
     
     # 2. Training for distance data
 
@@ -65,10 +71,10 @@ if '__main__' == __name__:
     common_input = torch.tensor([3]) # t, x, y
 
     dist_hidden = torch.ones(3, dtype=int)*30
-    dist_output = torch.tensor([5]) # u, v, s11, s22, s12
+    dist_output = torch.tensor([1]) # distance of all physical variables, u, v, s11, s22, s12
 
-    par_hidden = torch.ones(3, dtype=int)*20
-    # par_hidden = torch.tensor([12, 24, 24, 12])
+    # par_hidden = torch.ones(3, dtype=int)*20
+    par_hidden = torch.tensor([12, 24, 24, 12])
     par_output = torch.tensor([4]) # u, v, ut, vt
 
     gen_hidden = torch.ones(6, dtype=int)*140
@@ -82,8 +88,8 @@ if '__main__' == __name__:
     loss_func = nn.MSELoss()
     
     # 1. particular network
-    part_epochs = 10000
-    part_lr = 1.4e-6
+    part_epochs = 100
+    part_lr = 0.8e-4
     part_optimizer = optim.Adam(par_net.parameters(), lr=part_lr)
     # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
     part_train_loss = []
@@ -96,14 +102,17 @@ if '__main__' == __name__:
         field_bound_est = par_net(t_bound, x_bound, y_bound)
         bc_loss = (field_bound_est[:, :2]**2).mean(axis=0).sum()
 
-        part_loss = 10*ic_loss + 10*bc_loss
+        field_ptb_est = par_net(t_ptb, x_ptb, y_ptb)
+        ptb_loss = loss_func(field_ptb_est[:, :2], uv_ptb) 
+
+        part_loss = 10*ic_loss + bc_loss + ptb_loss
 
         part_loss.backward()
         part_optimizer.step()
         # part_scheduler.step()
-        if (epoch+1)%200 == 0: print(ic_loss.item(), bc_loss.item())
+        if (epoch+1)%50 == 0: print(ic_loss.item(), bc_loss.item(), ptb_loss.item())
 
-        part_train_loss.append(ic_loss.item() + bc_loss.item())
+        part_train_loss.append(ic_loss.item() + bc_loss.item() + ptb_loss.item())
 
         with torch.no_grad():
             # u, v, ut, vt = par_net(testt_ic, testx_ic, testy_ic).T
@@ -114,8 +123,24 @@ if '__main__' == __name__:
 
 
     # 2. Distance network
+    dist_epochs = 100
+    dist_lr = 2e-5
+    dist_optimizer = optim.Adam(dist_net.parameters(), lr=dist_lr)
+    # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
+    dist_train_loss = []
+    
+    for epoch in tqdm(range(dist_epochs)):
+        dist_est = dist_net(t_col, x_col, y_col)
+        dist_loss = loss_func(dist_est, distance)
 
+        dist_loss.backward()
+        dist_optimizer.step()
+        # part_scheduler.step()
+        if (epoch+1)%50 == 0: print(dist_loss.item())
 
+        dist_train_loss.append(dist_loss.item())
+
+        
     # 3. PDE network
 
 
@@ -123,9 +148,9 @@ if '__main__' == __name__:
 
 
 
-    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    fig, ax = plt.subplots(1, 3, figsize=(21, 6))
 
-    ax[0].plot(part_train_loss, label='total loss', color='blue')
+    ax[0].plot(part_train_loss, label='particular loss', color='blue')
     ax[0].legend()
     ax[0].set_xlabel('epoch')
     ax[0].set_ylabel('mean squared error')
@@ -136,6 +161,12 @@ if '__main__' == __name__:
     ax[1].set_xlabel('epoch')
     ax[1].set_ylabel('mean squared error')
     ax[1].set_yscale('log')
+
+    ax[2].plot(dist_train_loss, label='dist loss', color='blue')
+    ax[2].legend()
+    ax[2].set_xlabel('epoch')
+    ax[2].set_ylabel('mean squared error')
+    ax[2].set_yscale('log')
 
     plt.show()
 
