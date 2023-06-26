@@ -87,3 +87,53 @@ class EchoNet(nn.Module):
         u = self.model(grid)
         
         return u
+    
+
+def physics_informed_network(t, x, y, N1, N2, N3, info):
+    rho = info['density']
+    E = info['Young']
+    nu = info['Poisson']
+
+    u0, v0, ut0, vt0 = N1(t, x, y).T
+    d = N2(t, x, y)
+    ug, vg, utg, vtg, sxx, syy, sxy = N3(t, x, y).T
+
+    u = u0 + d*ug
+    v = v0 + d*vg
+    ut = ut0 + d*utg
+    vt = vt0 + d*vtg
+
+    t = nn.Parameter(t)
+    x = nn.Parameter(x)
+    y = nn.Parameter(y)
+
+    strain_xx = grad(outputs=u.sum(), inputs=x, create_graph=True)[0]
+    strain_yy = grad(outputs=v.sum(), inputs=y, create_graph=True)[0]
+    strain_xy = 0.5*(grad(outputs=u.sum(), inputs=y, create_graph=True)[0] + grad(outputs=v.sum(), inputs=x, create_graph=True)[0])
+
+    s_xx = E/(1-nu*nu)*strain_xx + E*nu/(1-nu*nu)*strain_yy
+    s_yy = E*nu/(1-nu*nu)*strain_xx + E/(1-nu*nu)*strain_yy
+    s_xy = E/(1+nu)/2*strain_xy
+
+    f_sxx = sxx - s_xx
+    f_syy = syy - s_yy
+    f_sxy = sxy - s_xy
+
+    u_t = grad(outputs=u.sum(), inputs=t, create_graph=True)[0]
+    v_t = grad(outputs=v.sum(), inputs=t, create_graph=True)[0]
+
+    f_ut = u_t - ut
+    f_vt = v_t - vt
+
+    sxx_x = grad(outputs=sxx.sum(), inputs=x, create_graph=True)[0]
+    syy_y = grad(outputs=syy.sum(), inputs=y, create_graph=True)[0]
+    sxy_x = grad(outputs=sxy.sum(), inputs=x, create_graph=True)[0]
+    sxy_y = grad(outputs=sxy.sum(), inputs=y, create_graph=True)[0]
+
+    utt = grad(outputs=ut.sum(), inputs=t, create_graph=True)[0]
+    vtt = grad(outputs=vt.sum(), inputs=t, create_graph=True)[0]
+
+    f_u = rho*utt - sxx_x - sxy_y
+    f_v = rho*vtt - syy_y - sxy_x
+
+    return torch.concat([f_u, f_v, f_ut, f_vt, f_sxx, f_syy, f_sxy], axis=1)

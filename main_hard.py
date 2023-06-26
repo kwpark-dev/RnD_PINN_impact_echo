@@ -9,10 +9,16 @@ from tqdm import tqdm
 from glob import glob
 
 from architectures.utils import eom_2d_perturb, eom_2d_distance
-from architectures.pde_solver_2d import EchoNet, solid_mechanics_network, time_derivative_network
+from architectures.pde_solver_2d import EchoNet, physics_informed_network
 
 
 if '__main__' == __name__:
+
+    # Material info: assume that linear, isotropic & homogeneous
+    info = {}
+    info['density'] = 7.85e3
+    info['Young'] = 2.05e5 # scaled by Mpa
+    info['Poisson'] = 0.28
 
     # Generate data
     # 1. Training for particular data
@@ -44,20 +50,23 @@ if '__main__' == __name__:
 
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
-    distance = eom_2d_distance(grid_col, 0.05, 0.05)
     
+    
+    ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
+    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 100)
+    
+    # 2. Training for collocation data
     t_col, x_col, y_col = grid_col.T
     t_col = t_col[:, None]
     x_col = x_col[:, None]
     y_col = y_col[:, None]
 
-    ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
-    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 100)
+   
+    # 3. Training for distance data
+    distance = eom_2d_distance(grid_col, 0.05, 0.05)
     
-    # 2. Training for distance data
 
-
-    # 3. Test data
+    # 4. Test data
     mesh_path = './data/impact_echo/plane_echo/triangle_mesh.npy'
     mesh = np.load(mesh_path)
     mesh = torch.from_numpy(mesh).float()
@@ -96,6 +105,8 @@ if '__main__' == __name__:
     test_error = []
 
     for epoch in tqdm(range(part_epochs)):
+        part_optimizer.zero_grad()
+
         field_init_est = par_net(t_init, x_init, y_init)
         ic_loss = (field_init_est**2).mean(axis=0).sum()
         
@@ -114,12 +125,12 @@ if '__main__' == __name__:
 
         part_train_loss.append(ic_loss.item() + bc_loss.item() + ptb_loss.item())
 
-        with torch.no_grad():
-            # u, v, ut, vt = par_net(testt_ic, testx_ic, testy_ic).T
-            u, v, ut, vt = par_net(tt, xx, yy).T
-            error = (u**2 + v**2 + ut**2 + vt**2).mean()
+        # with torch.no_grad():
+        #     # u, v, ut, vt = par_net(testt_ic, testx_ic, testy_ic).T
+        #     u, v, ut, vt = par_net(tt, xx, yy).T
+        #     error = (u**2 + v**2 + ut**2 + vt**2).mean()
 
-            test_error.append(error.item())
+        #     test_error.append(error.item())
 
 
     # 2. Distance network
@@ -130,6 +141,8 @@ if '__main__' == __name__:
     dist_train_loss = []
     
     for epoch in tqdm(range(dist_epochs)):
+        dist_optimizer.zero_grad()
+
         dist_est = dist_net(t_col, x_col, y_col)
         dist_loss = loss_func(dist_est, distance)
 
@@ -142,10 +155,28 @@ if '__main__' == __name__:
 
         
     # 3. PDE network
+    par_net.eval() # freeze network for particular solution
+    dist_net.eval() # freeze network for distance
 
+    gen_epochs = 1000
+    gen_lr = 1e-4
+    gen_optimizer = optim.Adam(gen_net.parameters(), lr=gen_lr)
+    gen_train_loss = []
 
+    for epoch in tqdm(range(gen_epochs)):
+        gen_optimizer.zero_grad()
+        
+        f_val = physics_informed_network(t_col, x_col, y_col, 
+                                         par_net, dist_net, gen_net, info)
+        
+        gen_loss = (f_val**2).mean(axis=0).sum()
 
+        gen_loss.backward()
+        gen_optimizer.step()
+        # part_scheduler.step()
+        if (epoch+1)%100 == 0: print(gen_loss.item())
 
+        gen_train_loss.append(gen_loss.item())
 
 
     fig, ax = plt.subplots(1, 3, figsize=(21, 6))
@@ -156,13 +187,13 @@ if '__main__' == __name__:
     ax[0].set_ylabel('mean squared error')
     ax[0].set_yscale('log')
 
-    ax[1].plot(test_error, label='discrepancy', color='blue')
+    ax[1].plot(dist_train_loss, label='dist loss', color='blue')
     ax[1].legend()
     ax[1].set_xlabel('epoch')
     ax[1].set_ylabel('mean squared error')
     ax[1].set_yscale('log')
 
-    ax[2].plot(dist_train_loss, label='dist loss', color='blue')
+    ax[2].plot(gen_train_loss, label='gen loss', color='blue')
     ax[2].legend()
     ax[2].set_xlabel('epoch')
     ax[2].set_ylabel('mean squared error')
