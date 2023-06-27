@@ -87,6 +87,21 @@ class GridDataset(Dataset):
         return self.grid[idx]
 
 
+class MeshDataset(Dataset):
+    def __init__(self, grid):
+        self.grid = grid
+
+    
+    def __len__(self):
+
+        return self.grid.shape[0]
+
+
+    def __getitem__(self, idx):
+
+        return self.grid[idx]
+
+
 def perturbation(path, v_init, x_pos, y_pos, scale):
     data = np.load(path)
 

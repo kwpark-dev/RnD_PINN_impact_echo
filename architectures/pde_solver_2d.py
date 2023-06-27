@@ -94,18 +94,19 @@ def physics_informed_network(t, x, y, N1, N2, N3, info):
     E = info['Young']
     nu = info['Poisson']
 
+    t = nn.Parameter(t)
+    x = nn.Parameter(x)
+    y = nn.Parameter(y)
+
     u0, v0, ut0, vt0 = N1(t, x, y).T
     d = N2(t, x, y)
+    d = d.flatten()
     ug, vg, utg, vtg, sxx, syy, sxy = N3(t, x, y).T
-
+    
     u = u0 + d*ug
     v = v0 + d*vg
     ut = ut0 + d*utg
     vt = vt0 + d*vtg
-
-    t = nn.Parameter(t)
-    x = nn.Parameter(x)
-    y = nn.Parameter(y)
 
     strain_xx = grad(outputs=u.sum(), inputs=x, create_graph=True)[0]
     strain_yy = grad(outputs=v.sum(), inputs=y, create_graph=True)[0]

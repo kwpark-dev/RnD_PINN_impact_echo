@@ -8,7 +8,7 @@ from pyDOE import lhs
 from tqdm import tqdm
 from glob import glob
 
-from architectures.utils import eom_2d_perturb, eom_2d_distance
+from architectures.utils import eom_2d_perturb, eom_2d_distance, MeshDataset
 from architectures.pde_solver_2d import EchoNet, physics_informed_network
 
 
@@ -24,7 +24,7 @@ if '__main__' == __name__:
     # 1. Training for particular data
     run_time = 12e-5
     Npts = 6000
-    Ncol = 120000
+    Ncol = 12000
 
     lb = np.array([0, 0, 0])
     ub = np.array([0.05, 0.05, 12e-5])
@@ -50,6 +50,10 @@ if '__main__' == __name__:
 
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
+    mesh_data = MeshDataset(grid_col)
+    mini_batch = 1000
+
+    mesh_loader = DataLoader(mesh_data, batch_size=mini_batch)
     
     
     ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
@@ -158,7 +162,7 @@ if '__main__' == __name__:
     par_net.eval() # freeze network for particular solution
     dist_net.eval() # freeze network for distance
 
-    gen_epochs = 1000
+    gen_epochs = 10
     gen_lr = 1e-4
     gen_optimizer = optim.Adam(gen_net.parameters(), lr=gen_lr)
     gen_train_loss = []
@@ -166,17 +170,23 @@ if '__main__' == __name__:
     for epoch in tqdm(range(gen_epochs)):
         gen_optimizer.zero_grad()
         
-        f_val = physics_informed_network(t_col, x_col, y_col, 
-                                         par_net, dist_net, gen_net, info)
-        
-        gen_loss = (f_val**2).mean(axis=0).sum()
+        batch_gen_loss = 0
+        for grid_batch in tqdm(mesh_loader):
+            tc, xc, yc = grid_batch.T
+            tc = tc[:, None]
+            xc = xc[:, None]
+            yc = yc[:, None]
 
-        gen_loss.backward()
-        gen_optimizer.step()
-        # part_scheduler.step()
-        if (epoch+1)%100 == 0: print(gen_loss.item())
+            f_val = physics_informed_network(tc, xc, yc, 
+                                             par_net, dist_net, gen_net, info)
+            
+            gen_loss = (f_val**2).mean(axis=0).sum()
 
-        gen_train_loss.append(gen_loss.item())
+            gen_loss.backward()
+            gen_optimizer.step()
+            batch_gen_loss += gen_loss.item()
+
+        gen_train_loss.append(batch_gen_loss)
 
 
     fig, ax = plt.subplots(1, 3, figsize=(21, 6))
