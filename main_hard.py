@@ -22,12 +22,12 @@ if '__main__' == __name__:
 
     # Generate data
     # 1. Training for particular data
-    run_time = 12e-5
+    run_time = 12e-6
     Npts = 6000
-    Ncol = 12000
+    Ncol = 120000
 
     lb = np.array([0, 0, 0])
-    ub = np.array([0.05, 0.05, 12e-5])
+    ub = np.array([0.05, 0.05, 12e-6])
 
     grid_initial = lb + np.array([0.05, 0.05, 0])*lhs(3, Npts)
     grid_initial = torch.from_numpy(grid_initial).float()
@@ -51,7 +51,7 @@ if '__main__' == __name__:
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
     mesh_data = MeshDataset(grid_col)
-    mini_batch = 1000
+    mini_batch = 2000
 
     mesh_loader = DataLoader(mesh_data, batch_size=mini_batch)
     
@@ -101,8 +101,8 @@ if '__main__' == __name__:
     loss_func = nn.MSELoss()
     
     # 1. particular network
-    part_epochs = 100
-    part_lr = 0.8e-4
+    part_epochs = 10000
+    part_lr = 2.5e-4
     part_optimizer = optim.Adam(par_net.parameters(), lr=part_lr)
     # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
     part_train_loss = []
@@ -125,7 +125,7 @@ if '__main__' == __name__:
         part_loss.backward()
         part_optimizer.step()
         # part_scheduler.step()
-        if (epoch+1)%50 == 0: print(ic_loss.item(), bc_loss.item(), ptb_loss.item())
+        if (epoch+1)%100 == 0: print(ic_loss.item(), bc_loss.item(), ptb_loss.item())
 
         part_train_loss.append(ic_loss.item() + bc_loss.item() + ptb_loss.item())
 
@@ -138,8 +138,8 @@ if '__main__' == __name__:
 
 
     # 2. Distance network
-    dist_epochs = 100
-    dist_lr = 2e-5
+    dist_epochs = 1500
+    dist_lr = 1e-5
     dist_optimizer = optim.Adam(dist_net.parameters(), lr=dist_lr)
     # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
     dist_train_loss = []
@@ -153,7 +153,7 @@ if '__main__' == __name__:
         dist_loss.backward()
         dist_optimizer.step()
         # part_scheduler.step()
-        if (epoch+1)%50 == 0: print(dist_loss.item())
+        if (epoch+1)%100 == 0: print(dist_loss.item())
 
         dist_train_loss.append(dist_loss.item())
 
@@ -162,8 +162,8 @@ if '__main__' == __name__:
     par_net.eval() # freeze network for particular solution
     dist_net.eval() # freeze network for distance
 
-    gen_epochs = 10
-    gen_lr = 1e-4
+    gen_epochs = 1000
+    gen_lr = 2e-6
     gen_optimizer = optim.Adam(gen_net.parameters(), lr=gen_lr)
     gen_train_loss = []
 
@@ -181,12 +181,21 @@ if '__main__' == __name__:
                                              par_net, dist_net, gen_net, info)
             
             gen_loss = (f_val**2).mean(axis=0).sum()
-
+            
             gen_loss.backward()
             gen_optimizer.step()
             batch_gen_loss += gen_loss.item()
+            if (epoch+1)%10 == 0 :
+                print(f_val[:, 0])
+                print(f_val[:, 1])
+                print(f_val[:, 2])
+                print(f_val[:, 3])
+                print(f_val[:, 4])
+                print(f_val[:, 5])
+                print(f_val[:, 6])
 
         gen_train_loss.append(batch_gen_loss)
+
 
 
     fig, ax = plt.subplots(1, 3, figsize=(21, 6))

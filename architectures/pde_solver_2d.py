@@ -115,17 +115,17 @@ def physics_informed_network(t, x, y, N1, N2, N3, info):
     s_xx = E/(1-nu*nu)*strain_xx + E*nu/(1-nu*nu)*strain_yy
     s_yy = E*nu/(1-nu*nu)*strain_xx + E/(1-nu*nu)*strain_yy
     s_xy = E/(1+nu)/2*strain_xy
-
-    f_sxx = sxx - s_xx
-    f_syy = syy - s_yy
-    f_sxy = sxy - s_xy
-
+    
+    f_sxx = sxx[:, None] - s_xx
+    f_syy = syy[:, None] - s_yy
+    f_sxy = sxy[:, None] - s_xy
+    
     u_t = grad(outputs=u.sum(), inputs=t, create_graph=True)[0]
     v_t = grad(outputs=v.sum(), inputs=t, create_graph=True)[0]
 
-    f_ut = u_t - ut
-    f_vt = v_t - vt
-
+    f_ut = u_t - ut[:, None]
+    f_vt = v_t - vt[:, None]
+    
     sxx_x = grad(outputs=sxx.sum(), inputs=x, create_graph=True)[0]
     syy_y = grad(outputs=syy.sum(), inputs=y, create_graph=True)[0]
     sxy_x = grad(outputs=sxy.sum(), inputs=x, create_graph=True)[0]
@@ -136,5 +136,5 @@ def physics_informed_network(t, x, y, N1, N2, N3, info):
 
     f_u = rho*utt - sxx_x - sxy_y
     f_v = rho*vtt - syy_y - sxy_x
-
+    
     return torch.concat([f_u, f_v, f_ut, f_vt, f_sxx, f_syy, f_sxy], axis=1)
