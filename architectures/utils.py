@@ -167,39 +167,47 @@ def eom_2d_ic_grid(xb, yb, size):
     return t.float(), x.float(), y.float()
 
 
-def eom_2d_perturb(path, center, scale, N):
+def eom_2d_perturb(path, center, scale, N, freq=5):
     data = np.load(path)
 
     t = data[:, 0]
     amp = data[:, 1]*scale
 
     mask = np.array(range(len(t)))
-    mask = np.where(mask%3==0, True, False)
+    mask = np.where(mask%freq==0, True, False)
     mask[-1] = True # add the last point
-
-    t = t[mask] # to reduce data by 1/3
+    
+    t = t[mask]
     amp = amp[mask][:, None]
-
+    
     x = np.linspace(0, 0.05, N, endpoint=True)
     y = np.linspace(0, 0.05, N, endpoint=True)
+    
+    xx, yy = np.meshgrid(x, y)
+    xx, tt = np.meshgrid(xx.flatten(), t)
+    yy, _ = np.meshgrid(yy.flatten(), t)
 
-    xx, tt  = np.meshgrid(x, t)
-    yy, _ = np.meshgrid(y, t)
+    # print(xx, xx.shape)
+    # print(yy, yy.shape)
+
+    # xx, tt  = np.meshgrid(x, t)
+    # yy, _ = np.meshgrid(y, t)
     
     u = amp*(xx-center[0])
     v = amp*(yy-center[1])
-
+    
     tt = tt.flatten()[:, None]
     xx = xx.flatten()[:, None]
     yy = yy.flatten()[:, None]
     u = u.flatten()[:, None]
     v = v.flatten()[:, None]
-
+    
     tt = torch.from_numpy(tt).float()
     xx = torch.from_numpy(xx).float()
     yy = torch.from_numpy(yy).float()
     u = torch.from_numpy(u).float()
     v = torch.from_numpy(v).float()
+    # print(min(v), min(u), max(v), max(u))
 
     return tt, xx, yy, torch.concat([u, v], axis=1)
 

@@ -14,6 +14,8 @@ from architectures.pde_solver_2d import EchoNet, physics_informed_network
 
 if '__main__' == __name__:
 
+    torch.set_printoptions(precision=8) # set precision point 8
+
     # Material info: assume that linear, isotropic & homogeneous
     info = {}
     info['density'] = 7.85e3
@@ -51,14 +53,30 @@ if '__main__' == __name__:
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
     mesh_data = MeshDataset(grid_col)
-    mini_batch = 2000
+    mini_batch = 8000
 
     mesh_loader = DataLoader(mesh_data, batch_size=mini_batch)
     
-    
     ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
-    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 100)
+    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 12)
     
+    # for i in range(121):
+    #     target = 1e-6 * i
+
+    #     mask = np.where(t_ptb==target, True, False)
+    #     t_slice = t_ptb[mask]
+    #     x_slice = x_ptb[mask]
+    #     y_slice = y_ptb[mask]
+    #     uv_ = np.sqrt((uv_ptb**2).sum(axis=1))[:, None]
+    #     uv_slice = uv_[mask]
+
+    #     fig, ax = plt.subplots()
+    #     ax.set_aspect('equal')
+    #     ax.scatter(x_slice, y_slice, c=uv_slice, vmin=-5e-10, vmax=5e-10)
+    #     plt.savefig('./models/echo/'+'check_'+str(i)+'.png')
+    #     plt.close()
+    # plt.show()
+
     # 2. Training for collocation data
     t_col, x_col, y_col = grid_col.T
     t_col = t_col[:, None]
@@ -101,7 +119,7 @@ if '__main__' == __name__:
     loss_func = nn.MSELoss()
     
     # 1. particular network
-    part_epochs = 10000
+    part_epochs = 1000
     part_lr = 2.5e-4
     part_optimizer = optim.Adam(par_net.parameters(), lr=part_lr)
     # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
@@ -120,14 +138,14 @@ if '__main__' == __name__:
         field_ptb_est = par_net(t_ptb, x_ptb, y_ptb)
         ptb_loss = loss_func(field_ptb_est[:, :2], uv_ptb) 
 
-        part_loss = 10*ic_loss + bc_loss + ptb_loss
+        part_loss = ic_loss + bc_loss + ptb_loss
 
         part_loss.backward()
         part_optimizer.step()
         # part_scheduler.step()
         if (epoch+1)%100 == 0: print(ic_loss.item(), bc_loss.item(), ptb_loss.item())
 
-        part_train_loss.append(ic_loss.item() + bc_loss.item() + ptb_loss.item())
+        part_train_loss.append(part_loss.item())
 
         # with torch.no_grad():
         #     # u, v, ut, vt = par_net(testt_ic, testx_ic, testy_ic).T
@@ -136,6 +154,9 @@ if '__main__' == __name__:
 
         #     test_error.append(error.item())
 
+
+    model_path = './models/echo/'
+    torch.save(par_net.state_dict(), model_path+'par_net')
 
     # 2. Distance network
     dist_epochs = 1500
@@ -157,13 +178,14 @@ if '__main__' == __name__:
 
         dist_train_loss.append(dist_loss.item())
 
+    torch.save(dist_net.state_dict(),  model_path+'dist_net')
         
     # 3. PDE network
     par_net.eval() # freeze network for particular solution
     dist_net.eval() # freeze network for distance
 
     gen_epochs = 1000
-    gen_lr = 2e-6
+    gen_lr = 4e-6
     gen_optimizer = optim.Adam(gen_net.parameters(), lr=gen_lr)
     gen_train_loss = []
 
@@ -185,7 +207,7 @@ if '__main__' == __name__:
             gen_loss.backward()
             gen_optimizer.step()
             batch_gen_loss += gen_loss.item()
-            if (epoch+1)%10 == 0 :
+            if (epoch+1)%50 == 0 :
                 print(f_val[:, 0])
                 print(f_val[:, 1])
                 print(f_val[:, 2])
@@ -196,6 +218,7 @@ if '__main__' == __name__:
 
         gen_train_loss.append(batch_gen_loss)
 
+    torch.save(gen_net.state_dict(),  model_path+'gen_net')
 
 
     fig, ax = plt.subplots(1, 3, figsize=(21, 6))
@@ -218,7 +241,8 @@ if '__main__' == __name__:
     ax[2].set_ylabel('mean squared error')
     ax[2].set_yscale('log')
 
-    plt.show()
+    # plt.show()
+    plt.savefig(model_path+'test.png')
 
 
 

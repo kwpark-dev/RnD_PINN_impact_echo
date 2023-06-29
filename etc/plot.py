@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
 
     response = []
-    tt = np.linspace(0, 12e-5, 301)
+    tt = np.linspace(0, 12e-6, 301)
     for i in range(301):
         echou, echov = pde_net(torch.tensor([[1]])*unit*i, torch.tensor([[0.025]]), torch.tensor([[0.035]])).T
         response.append(echov.detach().numpy())

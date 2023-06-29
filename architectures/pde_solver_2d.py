@@ -108,14 +108,18 @@ def physics_informed_network(t, x, y, N1, N2, N3, info):
     ut = ut0 + d*utg
     vt = vt0 + d*vtg
 
-    strain_xx = grad(outputs=u.sum(), inputs=x, create_graph=True)[0]
-    strain_yy = grad(outputs=v.sum(), inputs=y, create_graph=True)[0]
-    strain_xy = 0.5*(grad(outputs=u.sum(), inputs=y, create_graph=True)[0] + grad(outputs=v.sum(), inputs=x, create_graph=True)[0])
-
-    s_xx = E/(1-nu*nu)*strain_xx + E*nu/(1-nu*nu)*strain_yy
-    s_yy = E*nu/(1-nu*nu)*strain_xx + E/(1-nu*nu)*strain_yy
-    s_xy = E/(1+nu)/2*strain_xy
+    # ---------------- this maybe problematic
+    strain_xx = grad(outputs=ug.sum(), inputs=x, create_graph=True)[0]
+    strain_yy = grad(outputs=vg.sum(), inputs=y, create_graph=True)[0]
+    strain_xy = 0.5*(grad(outputs=ug.sum(), inputs=y, create_graph=True)[0] + grad(outputs=vg.sum(), inputs=x, create_graph=True)[0])
     
+    # see https://github.com/Raocp/PINN-elastodynamics/blob/master/ElasticWaveConfined/ElasticWave.py#L304
+    coef = E/((1+nu)*(1-2*nu))
+    s_xx = coef*(1-nu)*strain_xx + coef*nu*strain_yy
+    s_yy = coef*nu*strain_xx + coef*(1-nu)*strain_yy
+    s_xy = E/(2*(1+nu))*strain_xy
+    #----------------------------------------
+
     f_sxx = sxx[:, None] - s_xx
     f_syy = syy[:, None] - s_yy
     f_sxy = sxy[:, None] - s_xy
