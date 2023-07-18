@@ -30,8 +30,8 @@ if __name__ == "__main__":
     
     pde_net = BurgerNet(input_node, hidden_node, output_node)
 
-    epochs = 10000
-    lr = 0.001
+    epochs = 2000
+    lr = 3e-4
     optimizer = optim.Adam(pde_net.parameters(), lr=lr)
     ic_loss_func = MSELoss()
     bc_loss_func = MSELoss()
