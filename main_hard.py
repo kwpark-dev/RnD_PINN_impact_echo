@@ -9,7 +9,7 @@ from tqdm import tqdm
 from glob import glob
 
 from architectures.utils import eom_2d_perturb, eom_2d_distance, MeshDataset
-from architectures.pde_solver_2d import EchoNet, physics_informed_network
+from architectures.pde_solver_2d import EchoNet, physics_informed_network, dD_dt_network
 
 
 if '__main__' == __name__:
@@ -25,8 +25,8 @@ if '__main__' == __name__:
     # Generate data
     # 1. Training for particular data
     run_time = 12e-6
-    Npts = 6000
-    Ncol = 120000
+    Npts = 20000
+    Ncol = 240000
 
     lb = np.array([0, 0, 0])
     ub = np.array([0.05, 0.05, 12e-6])
@@ -53,12 +53,13 @@ if '__main__' == __name__:
     grid_col = ub*lhs(3, Ncol)
     grid_col = torch.from_numpy(grid_col).float()
     mesh_data = MeshDataset(grid_col)
-    mini_batch = 8000
+    mini_batch = 10000
 
     mesh_loader = DataLoader(mesh_data, batch_size=mini_batch)
     
     ptb_path = './data/impact_echo/impact_profile/Han_pulse.npy'
-    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, 12)
+    N_axis = 25
+    t_ptb, x_ptb, y_ptb, uv_ptb = eom_2d_perturb(ptb_path, [0.025, 0.025], 1e-8, N_axis)
     
     # for i in range(121):
     #     target = 1e-6 * i
@@ -87,7 +88,6 @@ if '__main__' == __name__:
     # 3. Training for distance data
     distance = eom_2d_distance(grid_col, 0.05, 0.05)
     
-
     # 4. Test data
     mesh_path = './data/impact_echo/plane_echo/triangle_mesh.npy'
     mesh = np.load(mesh_path)
@@ -101,14 +101,14 @@ if '__main__' == __name__:
     # Define networks
     common_input = torch.tensor([3]) # t, x, y
 
-    dist_hidden = torch.ones(3, dtype=int)*30
-    dist_output = torch.tensor([1]) # distance of all physical variables, u, v, s11, s22, s12
+    dist_hidden = torch.ones(6, dtype=int)*30
+    dist_output = torch.tensor([5]) # distance of all physical variables, u, v, s11, s22, s12
 
-    # par_hidden = torch.ones(3, dtype=int)*20
-    par_hidden = torch.tensor([12, 24, 24, 12])
+    par_hidden = torch.ones(6, dtype=int)*20
+    # par_hidden = torch.tensor([12, 24, 24, 12])
     par_output = torch.tensor([4]) # u, v, ut, vt
 
-    gen_hidden = torch.ones(6, dtype=int)*140
+    gen_hidden = torch.ones(10, dtype=int)*160
     gen_output = torch.tensor([7]) # u, v, ut, vt, s11, s22, s12
 
     dist_net = EchoNet(common_input, dist_hidden, dist_output)
@@ -119,11 +119,15 @@ if '__main__' == __name__:
     loss_func = nn.MSELoss()
     
     # 1. particular network
-    part_epochs = 1000
-    part_lr = 2.5e-4
+    part_epochs = 3000
+    part_lr = 1.2e-4
     part_optimizer = optim.Adam(par_net.parameters(), lr=part_lr)
     # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
     part_train_loss = []
+    ic_train = []
+    bc_train = []
+    ptb_train = []
+
     test_error = []
 
     for epoch in tqdm(range(part_epochs)):
@@ -146,6 +150,9 @@ if '__main__' == __name__:
         if (epoch+1)%100 == 0: print(ic_loss.item(), bc_loss.item(), ptb_loss.item())
 
         part_train_loss.append(part_loss.item())
+        ic_train.append(ic_loss.item())
+        bc_train.append(bc_loss.item())
+        ptb_train.append(ptb_loss.item())
 
         # with torch.no_grad():
         #     # u, v, ut, vt = par_net(testt_ic, testx_ic, testy_ic).T
@@ -160,7 +167,7 @@ if '__main__' == __name__:
 
     # 2. Distance network
     dist_epochs = 1500
-    dist_lr = 1e-5
+    dist_lr = 1.2e-5 # 1e-5
     dist_optimizer = optim.Adam(dist_net.parameters(), lr=dist_lr)
     # part_scheduler = optim.lr_scheduler.LinearLR(part_optimizer, start_factor=1.0, end_factor=0.005, total_iters=5000)
     dist_train_loss = []
@@ -171,12 +178,16 @@ if '__main__' == __name__:
         dist_est = dist_net(t_col, x_col, y_col)
         dist_loss = loss_func(dist_est, distance)
 
-        dist_loss.backward()
+        dt_dist = dD_dt_network(t_col, x_col, y_col, dist_net)
+        dt_dist_loss = (dt_dist**2).mean(axis=0).sum()
+
+        sum_dist_loss = dist_loss + dt_dist_loss
+        sum_dist_loss.backward()
         dist_optimizer.step()
         # part_scheduler.step()
-        if (epoch+1)%100 == 0: print(dist_loss.item())
+        if (epoch+1)%100 == 0: print(dist_loss.item(), dt_dist_loss.item())
 
-        dist_train_loss.append(dist_loss.item())
+        dist_train_loss.append(sum_dist_loss.item())
 
     torch.save(dist_net.state_dict(),  model_path+'dist_net')
         
@@ -185,7 +196,7 @@ if '__main__' == __name__:
     dist_net.eval() # freeze network for distance
 
     gen_epochs = 1000
-    gen_lr = 4e-6
+    gen_lr = 0.1e-6
     gen_optimizer = optim.Adam(gen_net.parameters(), lr=gen_lr)
     gen_train_loss = []
 
@@ -199,15 +210,14 @@ if '__main__' == __name__:
             xc = xc[:, None]
             yc = yc[:, None]
 
-            f_val = physics_informed_network(tc, xc, yc, 
-                                             par_net, dist_net, gen_net, info)
+            f_val = physics_informed_network(tc, xc, yc, gen_net, info)
             
             gen_loss = (f_val**2).mean(axis=0).sum()
             
             gen_loss.backward()
             gen_optimizer.step()
             batch_gen_loss += gen_loss.item()
-            if (epoch+1)%50 == 0 :
+            if (epoch+1)%100 == 0 :
                 print(f_val[:, 0])
                 print(f_val[:, 1])
                 print(f_val[:, 2])
@@ -224,7 +234,11 @@ if '__main__' == __name__:
     fig, ax = plt.subplots(1, 3, figsize=(21, 6))
 
     ax[0].plot(part_train_loss, label='particular loss', color='blue')
-    ax[0].legend()
+    ax[0].plot(ic_train, label='ic loss', color='red')
+    ax[0].plot(bc_train, label='bc loss', color='black')
+    ax[0].plot(ptb_train, label='ptb loss', color='orange')
+
+    ax[0].legend(loc='upper right')
     ax[0].set_xlabel('epoch')
     ax[0].set_ylabel('mean squared error')
     ax[0].set_yscale('log')

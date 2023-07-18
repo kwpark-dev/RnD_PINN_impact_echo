@@ -89,7 +89,24 @@ class EchoNet(nn.Module):
         return u
     
 
-def physics_informed_network(t, x, y, N1, N2, N3, info):
+def dD_dt_network(t, x, y, N2):
+    t = nn.Parameter(t)
+    x = nn.Parameter(x)
+    y = nn.Parameter(y)
+
+    d1, d2, d3, d4, d5 = N2(t, x, y).T
+
+    f1 = grad(outputs=d1.sum(), inputs=t, create_graph=True)[0]
+    f2 = grad(outputs=d2.sum(), inputs=t, create_graph=True)[0]
+    f3 = grad(outputs=d3.sum(), inputs=t, create_graph=True)[0]
+    f4 = grad(outputs=d4.sum(), inputs=t, create_graph=True)[0]
+    f5 = grad(outputs=d5.sum(), inputs=t, create_graph=True)[0]
+
+    return torch.concat([f1, f2, f3, f4, f5], axis=1)
+
+
+
+def physics_informed_network(t, x, y, N3, info):
     rho = info['density']
     E = info['Young']
     nu = info['Poisson']
@@ -98,15 +115,15 @@ def physics_informed_network(t, x, y, N1, N2, N3, info):
     x = nn.Parameter(x)
     y = nn.Parameter(y)
 
-    u0, v0, ut0, vt0 = N1(t, x, y).T
-    d = N2(t, x, y)
-    d = d.flatten()
+    # u0, v0, ut0, vt0 = N1(t, x, y).T
+    # d = N2(t, x, y)
+    # d = d.flatten()
     ug, vg, utg, vtg, sxx, syy, sxy = N3(t, x, y).T
     
-    u = u0 + d*ug
-    v = v0 + d*vg
-    ut = ut0 + d*utg
-    vt = vt0 + d*vtg
+    # u = u0 + d*ug
+    # v = v0 + d*vg
+    # ut = ut0 + d*utg
+    # vt = vt0 + d*vtg
 
     # ---------------- this maybe problematic
     strain_xx = grad(outputs=ug.sum(), inputs=x, create_graph=True)[0]
@@ -124,21 +141,21 @@ def physics_informed_network(t, x, y, N1, N2, N3, info):
     f_syy = syy[:, None] - s_yy
     f_sxy = sxy[:, None] - s_xy
     
-    u_t = grad(outputs=u.sum(), inputs=t, create_graph=True)[0]
-    v_t = grad(outputs=v.sum(), inputs=t, create_graph=True)[0]
+    u_t = grad(outputs=ug.sum(), inputs=t, create_graph=True)[0]
+    v_t = grad(outputs=vg.sum(), inputs=t, create_graph=True)[0]
 
-    f_ut = u_t - ut[:, None]
-    f_vt = v_t - vt[:, None]
+    f_ut = u_t - utg[:, None]
+    f_vt = v_t - vtg[:, None]
     
     sxx_x = grad(outputs=sxx.sum(), inputs=x, create_graph=True)[0]
     syy_y = grad(outputs=syy.sum(), inputs=y, create_graph=True)[0]
     sxy_x = grad(outputs=sxy.sum(), inputs=x, create_graph=True)[0]
     sxy_y = grad(outputs=sxy.sum(), inputs=y, create_graph=True)[0]
 
-    utt = grad(outputs=ut.sum(), inputs=t, create_graph=True)[0]
-    vtt = grad(outputs=vt.sum(), inputs=t, create_graph=True)[0]
+    u_tt = grad(outputs=u_t.sum(), inputs=t, create_graph=True)[0]
+    v_tt = grad(outputs=v_t.sum(), inputs=t, create_graph=True)[0]
 
-    f_u = rho*utt - sxx_x - sxy_y
-    f_v = rho*vtt - syy_y - sxy_x
+    f_u = rho*u_tt - sxx_x - sxy_y
+    f_v = rho*v_tt - syy_y - sxy_x
     
     return torch.concat([f_u, f_v, f_ut, f_vt, f_sxx, f_syy, f_sxy], axis=1)

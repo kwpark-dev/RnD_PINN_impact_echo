@@ -216,12 +216,17 @@ def eom_2d_distance(grid, x_scale, y_scale):
     dist = []
 
     for i in grid:
-        min_dist = min(i[0], i[1], i[2], x_scale-i[1], y_scale-i[2])
-        dist.append(min_dist)
+        u_dist = min(i[0], i[1])
+        v_dist = min(i[0], i[2])
+        sxx_dist = min(i[0], x_scale-i[1])
+        syy_dist = min(i[0], y_scale-i[2])
+        sxy_dist = min(i[0], i[1], i[2], x_scale-i[1], y_scale-i[2])
+        
+        dist.append([u_dist, v_dist, sxx_dist, syy_dist, sxy_dist])
 
     dist = torch.FloatTensor(dist)
 
-    return dist[:, None]
+    return dist
     
 
 
