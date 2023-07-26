@@ -108,7 +108,7 @@ if '__main__' == __name__:
     # par_hidden = torch.tensor([12, 24, 24, 12])
     par_output = torch.tensor([4]) # u, v, ut, vt
 
-    gen_hidden = torch.ones(10, dtype=int)*160
+    gen_hidden = torch.ones(12, dtype=int)*160
     gen_output = torch.tensor([7]) # u, v, ut, vt, s11, s22, s12
 
     dist_net = EchoNet(common_input, dist_hidden, dist_output)
@@ -195,8 +195,8 @@ if '__main__' == __name__:
     par_net.eval() # freeze network for particular solution
     dist_net.eval() # freeze network for distance
 
-    gen_epochs = 1000
-    gen_lr = 0.1e-6
+    gen_epochs = 2000
+    gen_lr = 0.1e-7
     gen_optimizer = optim.Adam(gen_net.parameters(), lr=gen_lr)
     gen_train_loss = []
 

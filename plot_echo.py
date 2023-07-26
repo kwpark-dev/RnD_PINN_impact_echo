@@ -16,14 +16,14 @@ if __name__ == '__main__':
 
     common_input = torch.tensor([3]) # t, x, y
 
-    dist_hidden = torch.ones(4, dtype=int)*30
+    dist_hidden = torch.ones(6, dtype=int)*30
     dist_output = torch.tensor([5]) # distance of all physical variables, u, v, s11, s22, s12
 
-    # par_hidden = torch.ones(3, dtype=int)*20
-    par_hidden = torch.tensor([12, 24, 24, 12])
+    par_hidden = torch.ones(6, dtype=int)*20
+    # par_hidden = torch.tensor([12, 24, 24, 12])
     par_output = torch.tensor([4]) # u, v, ut, vt
 
-    gen_hidden = torch.ones(10, dtype=int)*140
+    gen_hidden = torch.ones(12, dtype=int)*160
     gen_output = torch.tensor([7]) # u, v, ut, vt, s11, s22, s12
 
     dist_net = EchoNet(common_input, dist_hidden, dist_output)
@@ -64,7 +64,7 @@ if __name__ == '__main__':
         print(min(intensity), max(intensity))
         fig, ax = plt.subplots()
         ax.set_aspect('equal')
-        tpcc = ax.tripcolor(triangles, intensity, shading='flat', vmin=1.6e-4, vmax=2.5e-3)
+        tpcc = ax.tripcolor(triangles, intensity, shading='flat', vmin=3.6e-4, vmax=1.36e-3)
         fig.colorbar(tpcc)
         ax.set_title('field_intensity_'+str(i))
 
